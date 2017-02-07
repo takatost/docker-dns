@@ -192,7 +192,7 @@ class DockerMonitor(object):
         if not proxy_addr:
             return [ value['IPAddress'] for value in networks.values() ]
         else:
-            return [ proxy_addr ]
+            return [ self._proxy_addr ]
 
     def _inspect(self, cid):
         # get full details on this container from docker
