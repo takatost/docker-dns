@@ -189,7 +189,7 @@ class DockerMonitor(object):
         return [ '.'.join((name, self._domain)) for name in names ]
 
     def _get_addrs(self, networks):
-        if not proxy_addr:
+        if not self._proxy_addr:
             return [ value['IPAddress'] for value in networks.values() ]
         else:
             return [ self._proxy_addr ]
