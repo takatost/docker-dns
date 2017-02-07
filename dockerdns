@@ -94,9 +94,7 @@ class NameTable(object):
         if key:
             with self._lock:
                 res = self._storage.get(key)
-                if not res:
-                    log('table.get %s with NoneType' % (name))
-                else:
+                if res:
                     log('table.get %s with %s' % (name, ", ".join(addr for addr in res)))
                 return res
 
@@ -248,8 +246,11 @@ class DnsServer(DatagramServer):
             return reply.pack()
 
         for addr in addrs:
-            reply.add_answer(RR(rec.q.qname, QTYPE.A, rdata=A(addr)))
-
+            try:
+                reply.add_answer(RR(rec.q.qname, QTYPE.A, rdata=A(addr)))
+            except Exception:
+                continue
+                
         return reply.pack()
 
     def _resolve(self, name):
