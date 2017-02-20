@@ -127,7 +127,7 @@ class DockerMonitor(object):
 
     'Reads events from Docker and updates the name table'
 
-    def __init__(self, client, table, domain):
+    def __init__(self, client, table):
         self._docker = client
         self._table = table
 
