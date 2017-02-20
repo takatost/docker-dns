@@ -127,11 +127,9 @@ class DockerMonitor(object):
 
     'Reads events from Docker and updates the name table'
 
-    def __init__(self, client, table, domain, proxy_addr):
+    def __init__(self, client, table, domain):
         self._docker = client
         self._table = table
-        self._domain = domain.lstrip('.')
-        self._proxy_addr = proxy_addr
 
     def run(self):
         # start the event poller, but don't read from the stream yet
@@ -152,47 +150,20 @@ class DockerMonitor(object):
                 if cid is None:
                     continue
                 status = evt.get('status')
-                if status in set(('start', 'die', 'rename')):
+                if status in set(('start', 'die')):
                     try:
                         for rec in self._inspect(cid):
                             if status == 'start':
                                 for addr in rec.addrs:
                                     self._table.add(rec.name, addr)
-
-                            elif status == 'rename':
-                                old_name = get(evt, 'Actor', 'Attributes', 'oldName')
-                                new_name = get(evt, 'Actor', 'Attributes', 'name')
-                                old_name = '.'.join((old_name, self._domain))
-                                new_name = '.'.join((new_name, self._domain))
-                                self._table.rename(old_name, new_name)
-
                             else:
                                 self._table.remove(rec.name)
 
                     except Exception as e:
                         log('Error: %s', e)
 
-    def _get_names(self, name, labels):
-        names = [ RE_VALIDNAME.sub('', name).rstrip('.') ]
-
-        labels = labels or {}
-        instance = int(labels.get('com.docker.compose.container-number', 1))
-        service = labels.get('com.docker.compose.service')
-        project = labels.get('com.docker.compose.project')
-
-        if all((instance, service, project)):
-            # the first instance of a service is available without number
-            # prefix
-            if instance == 1:
-                names.append('%s.%s' % (service, project))
-
-        return [ '.'.join((name, self._domain)) for name in names ]
-
     def _get_addrs(self, networks):
-        if not self._proxy_addr:
-            return [ value['IPAddress'] for value in networks.values() ]
-        else:
-            return [ self._proxy_addr ]
+        return [ value['IPAddress'] for value in networks.values() ]
 
     def _inspect(self, cid):
         # get full details on this container from docker
@@ -210,7 +181,17 @@ class DockerMonitor(object):
         networks = get(rec, 'NetworkSettings', 'Networks')
         ip_addrs = self._get_addrs(networks)
 
-        return [ Container(id_, name, state, ip_addrs) for name in self._get_names(name, labels) ]
+        dns_names = []
+        for item in get(rec, 'Config', 'Env'):
+            item = item.split('=')
+            if item[0].find('INNER_VIRTUAL_HOST') == 0:
+                for virtual_host in item[1].split(','):
+                    dns_names.append(virtual_host)
+            
+            if item[0].find('DNS_IP_ADDR') == 0:
+                ip_addrs = [ item[1] ]
+
+        return [ Container(id_, name, state, ip_addrs) for name in dns_names ]
 
 
 class DnsServer(DatagramServer):
@@ -298,12 +279,8 @@ def parse_args():
         help='Url to docker TCP/UNIX socket')
     parser.add_argument('--dns-bind', default=DNS_BINDADDR,
         help='Bind address for DNS server')
-    parser.add_argument('--domain', default='docker',
-        help='Base domain name for registered services')
     parser.add_argument('--resolver', default=DNS_RESOLVER, nargs='*',
         help='Servers for recursive DNS resolution')
-    parser.add_argument('--proxy-addr',
-        help='Proxy Server Address')
     parser.add_argument('--no-recursion', action='store_const', const=1,
         help='Disables recursive DNS queries')
     parser.add_argument('-q', '--quiet', action='store_const', const=1,
@@ -323,7 +300,7 @@ def main():
     QUIET = args.quiet
     resolver = () if args.no_recursion else args.resolver
     table = NameTable([(k + "." + args.domain, v) for (k, v) in args.record])
-    monitor = DockerMonitor(docker.Client(args.docker, version='auto'), table, args.domain, args.proxy_addr)
+    monitor = DockerMonitor(docker.Client(args.docker, version='auto'), table)
     dns = DnsServer(args.dns_bind, table, resolver)
     gevent.signal(signal.SIGINT, stop, dns)
     dns.start()
