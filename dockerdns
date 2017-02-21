@@ -184,7 +184,7 @@ class DockerMonitor(object):
         dns_names = []
         for item in get(rec, 'Config', 'Env'):
             item = item.split('=')
-            if item[0].find('INNER_VIRTUAL_HOST') == 0:
+            if item[0].find('DNS_HOSTS') == 0:
                 for virtual_host in item[1].split(','):
                     dns_names.append(virtual_host)
             
