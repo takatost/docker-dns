@@ -156,8 +156,6 @@ class DockerMonitor(object):
                             if status == 'start':
                                 for addr in rec.addrs:
                                     self._table.add(rec.name, addr)
-                            else:
-                                self._table.remove(rec.name)
 
                     except Exception as e:
                         log('Error: %s', e)
